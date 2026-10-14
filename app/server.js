@@ -8,8 +8,8 @@
  *   GET /readyz  -> 200 while able to serve, 503 once draining (readiness)
  *
  * Built on the Node standard library only. No dependencies means no
- * node_modules in the image, which in turn means there is nothing root-owned
- * that has to be chown'ed before the container can drop privileges.
+ * node_modules in the image. The non-root user only needs read access to
+ * the source files; the app does not write to its working directory.
  */
 
 const http = require('node:http');
@@ -27,9 +27,8 @@ const POD_NAME = process.env.POD_NAME || process.env.HOSTNAME || 'local';
 
 const STARTED_AT = Date.now();
 
-// Flipped as soon as we receive SIGTERM. Readiness starts failing
-// immediately so the endpoint slice drops this pod and traffic moves to
-// the other replicas while the listener drains.
+// Flipped on shutdown. Endpoint removal is asynchronous in Kubernetes;
+// graceful shutdown alone does not guarantee a zero-downtime rollout.
 let draining = false;
 
 function sendJSON(res, statusCode, body) {
@@ -91,6 +90,7 @@ let shuttingDown = false;
 function shutdown(signal) {
   if (shuttingDown) return;
   shuttingDown = true;
+  draining = true;
   console.log(`[${VERSION}] received ${signal}, draining connections`);
 
   // Stop accepting new connections. Existing ones are allowed to finish.

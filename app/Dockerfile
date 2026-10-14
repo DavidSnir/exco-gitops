@@ -14,11 +14,11 @@ ENV NODE_ENV=production \
 
 WORKDIR /app
 
-# Only two files. No `npm install` means no node_modules, so nothing in the
-# image is root-owned and the container can drop privileges cleanly below.
+# Only two files. Root-owned source files remain readable by the non-root
+# runtime user; the app needs no write access to its working directory.
 COPY package.json server.js ./
 
-# `node` (uid 1000, gid 1000) ships with the official image and owns /app.
+# `node` (uid 1000, gid 1000) ships with the official image.
 USER node
 
 EXPOSE 8080
