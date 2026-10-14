@@ -89,6 +89,7 @@ app/                      the service
 k8s/                      GitOps source of truth — Argo CD reads this
 terraform/                cluster + Argo CD + Traefik, as code
   values/                 version-controlled Helm values
+  check.sh                read-only cluster acceptance checks
 .github/workflows/        CI/CD
 ```
 
@@ -116,7 +117,16 @@ Updated as work progresses.
   explicit resource budgets. Disable Dex, notifications and ApplicationSet replicas for now.
 - Ports 8080 and 8081 are occupied by an existing process; use 18080 and 18081 instead.
 - Terraform `init`, `validate` and the fresh plan pass; plan contains three resources:
-  the kind cluster and two Helm releases. Live create/destroy/recreate checks pending.
+  the kind cluster and two Helm releases.
+- Both pinned charts pass Helm lint with the committed values. Downloaded chart SHA256
+  checksums match their official repository indexes; rendered Traefik Service is NodePort 30080.
+- First ordinary apply succeeded: cluster created in 34 seconds; Argo CD and Traefik both
+  deployed. All three nodes and all five running add-on pods are Ready with zero restarts.
+- Acceptance checks pass; `localhost:18080` returns the expected pre-app 404. Argo CD's
+  health endpoint and authenticated admin session verified without printing credentials.
+- Second Terraform plan returns exit code 0 with **No changes**. Destroy/recreate pending.
+- Permission inspection caught a world-readable local Terraform state file. Set it to 0600;
+  use `umask 077` before future Terraform commands because state includes cluster credentials.
 
 ---
 
@@ -144,10 +154,12 @@ Prerequisites: Docker Desktop running, Terraform installed, and a free TCP port 
 Run commands as your normal Mac user, not root.
 
 ```sh
+umask 077  # state includes private keys; keep new local files owner-only
 terraform -chdir=terraform init
 terraform -chdir=terraform validate
 terraform -chdir=terraform plan
 terraform -chdir=terraform apply
+sh terraform/check.sh
 
 export KUBECONFIG="$PWD/terraform/kubeconfig"
 kubectl get nodes -o wide
@@ -165,6 +177,7 @@ To change the local HTTP port, use `-var='app_port=18090'` consistently for plan
 the kind cluster must be recreated to change Docker port mappings.
 
 State and kubeconfig contain credentials: they are gitignored and must stay local.
+If state already exists with broader permissions, run `chmod 600 terraform/*.tfstate*`.
 The provider lock file is committed. Docker image caches and the shared Docker `kind`
 network may remain after destroy; the exercise's three node containers must be gone.
 
