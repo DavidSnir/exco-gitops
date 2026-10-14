@@ -10,7 +10,7 @@ ARG APP_VERSION=dev
 
 ENV NODE_ENV=production \
     APP_VERSION=${APP_VERSION} \
-    PORT=8080
+    PORT=8090
 
 WORKDIR /app
 
@@ -21,7 +21,7 @@ COPY package.json server.js ./
 # `node` (uid 1000, gid 1000) ships with the official image.
 USER node
 
-EXPOSE 8080
+EXPOSE 8090
 
 # Uses the app's own liveness endpoint so container health and Kubernetes
 # liveness probe agree on what "healthy" means.
