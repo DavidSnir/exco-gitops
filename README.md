@@ -15,8 +15,10 @@ Tools: Docker Desktop, kind, Terraform, Helm, kubectl, git, GitHub CLI, `yq`, an
 ## Current status
 
 - **Parts 0–1 complete:** Service and non-root container tested. Terraform apply, destroy, and recreation verified; cluster left running.
-- **Part 2 in progress:** App source converted to Helm; the SHA-tagged image is loaded into kind. Applying the bootstrap and validating GitOps deployment/browser access next.
+- **Part 2 complete:** Argo CD renders the Helm chart from git and reports Synced/Healthy. Two ready non-root replicas run across the workers, with probes and resource budgets. App opens at http://localhost:18080 through Ingress.
 - **Not done:** CI/CD and GHCR publishing, automatic image-tag updates in git, zero-downtime demonstration, HPA, monitoring, and production EKS notes.
+
+Verified: both Helm charts lint successfully, GitOps/app acceptance checks pass, all three routes return 200, and 20 requests reached both replicas (10 each). Terraform reports no changes. This is a steady-state check, not yet the zero-downtime rollout demonstration.
 
 ## Repository
 
