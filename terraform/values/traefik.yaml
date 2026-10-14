@@ -1,0 +1,44 @@
+# NodePort needs no cloud load balancer or tunnel on Docker Desktop.
+service:
+  spec:
+    type: NodePort
+    # The mapped control-plane node can route to Traefik on either worker.
+    externalTrafficPolicy: Cluster
+
+ports:
+  web:
+    # Must match the kind container_port in cluster.tf.
+    nodePort: 30080
+    asDefault: true
+  websecure:
+    expose:
+      default: false
+
+ingressClass:
+  enabled: true
+  name: traefik
+  isDefaultClass: false
+
+providers:
+  kubernetesIngress:
+    enabled: true
+    # NodePort has no load-balancer IP to publish; advertise our local URL.
+    publishedService:
+      enabled: false
+    ingressEndpoint:
+      ip: 127.0.0.1
+  kubernetesCRD:
+    enabled: false
+  kubernetesGateway:
+    enabled: false
+
+api:
+  dashboard: false
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 250m
+    memory: 128Mi

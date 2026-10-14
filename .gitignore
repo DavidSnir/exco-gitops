@@ -8,6 +8,7 @@ terraform/*.tfstate.*
 terraform/*.tfplan
 terraform/kubeconfig
 terraform/kind.yaml.bak
+terraform/.terraform.tfstate.lock.info
 
 # Local scratch
 node_modules/
