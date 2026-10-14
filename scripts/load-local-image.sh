@@ -4,7 +4,7 @@
 set -eu
 
 repo_dir=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
-image=$(yq -r '.spec.template.spec.containers[] | select(.name == "app") | .image' "$repo_dir/k8s/deployment.yaml")
+image=$(yq -r '.image.repository + ":" + .image.tag' "$repo_dir/k8s/values.yaml")
 case "$image" in
   exco-app:sha-*) revision=${image#exco-app:sha-} ;;
   *) printf 'This helper only handles local exco-app:sha-* images; registry images should be pulled normally.\n' >&2; exit 1 ;;

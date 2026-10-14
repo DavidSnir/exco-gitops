@@ -5,7 +5,7 @@ resource "helm_release" "bootstrap" {
   name      = "exco-bootstrap"
   namespace = "argocd"
   chart     = "${path.module}/charts/bootstrap"
-  version   = "0.1.0"
+  version   = "0.1.1"
   values    = [file("${path.module}/charts/bootstrap/values.yaml")]
 
   atomic          = true

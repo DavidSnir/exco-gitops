@@ -10,5 +10,5 @@ spec:
     app.kubernetes.io/name: exco-app
   ports:
     - name: http
-      port: 80
+      port: {{ .Values.service.port }}
       targetPort: http

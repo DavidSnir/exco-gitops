@@ -11,6 +11,10 @@ spec:
     repoURL: {{ .Values.repoURL | quote }}
     targetRevision: {{ .Values.targetRevision | quote }}
     path: {{ .Values.path | quote }}
+    helm:
+      releaseName: {{ .Values.helmReleaseName | quote }}
+      valueFiles:
+        - values.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: {{ .Values.destinationNamespace | quote }}

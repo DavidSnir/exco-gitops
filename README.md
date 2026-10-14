@@ -6,7 +6,7 @@
 
 1. **Part 0:** Set up tools and GitHub; build and test a small Node.js service in a non-root container.
 2. **Part 1:** Use Terraform to create a kind cluster (1 control-plane, 2 workers) and install Argo CD and Traefik with Helm.
-3. **Part 2:** Have Argo CD sync `k8s/`: two replicas, probes, resource requests/limits, Service and Ingress.
+3. **Part 2:** Have Argo CD render the Helm chart in `k8s/` and sync two replicas, probes, resource requests/limits, Service and Ingress.
 4. **Part 3:** Use GitHub Actions to push commit-SHA images to GHCR and update the image tag in git. Test a rollout with a request loop; no deployment commands from CI.
 5. **If time permits:** HPA, Prometheus/Grafana through Argo CD, and production EKS notes.
 
@@ -15,15 +15,14 @@ Tools: Docker Desktop, kind, Terraform, Helm, kubectl, git, GitHub CLI, `yq`, an
 ## Current status
 
 - **Parts 0–1 complete:** Service and non-root container tested. Terraform apply, destroy, and recreation verified; cluster left running.
-- **Part 2 partial:** Deployment, Service, Ingress and bootstrap files are committed; the SHA-tagged image is loaded into kind. The bootstrap Application has not been applied, so the app is not deployed and ingress currently returns 404.
-- **Still missing for Part 2:** Convert the current Kustomize app source to Helm as requested, apply the bootstrap, then verify Argo CD reports Synced/Healthy, two ready replicas, and browser access.
+- **Part 2 in progress:** App source converted to Helm; the SHA-tagged image is loaded into kind. Applying the bootstrap and validating GitOps deployment/browser access next.
 - **Not done:** CI/CD and GHCR publishing, automatic image-tag updates in git, zero-downtime demonstration, HPA, monitoring, and production EKS notes.
 
 ## Repository
 
 ```text
 app/                         Node.js service and Dockerfile (port 8090)
-k8s/                         App manifests (currently Kustomize; Helm conversion pending)
+k8s/                         Helm app chart: templates and values.yaml, rendered by Argo CD
 terraform/                   kind, Argo CD, Traefik and Application bootstrap chart
 scripts/load-local-image.sh  Build the manifest's source revision and load it into kind
 scripts/check-part2.sh       GitOps and app acceptance checks
@@ -60,6 +59,15 @@ curl -fsS http://localhost:18080/
 ```
 
 Once synced and healthy, open **http://localhost:18080**. Traffic goes through Traefik; no app port-forward is needed. Argo CD auto-syncs, prunes and self-heals from `k8s/` on `main`.
+
+Edit image tags, replicas and resource budgets in `k8s/values.yaml`, then commit and push. Preview without deploying:
+
+```sh
+helm lint k8s
+helm template exco-app k8s --namespace exco
+```
+
+Argo CD renders Helm templates and manages the app resources; it does not create an app Helm release. Use Argo CD for app status, not `helm list`.
 
 Part 2 uses a SHA-tagged image loaded into kind from its exact source commit. Fresh clusters need the load step; pods may show ImagePullBackOff until it completes and Kubernetes retries. GHCR replaces local image loading in Part 3.
 

@@ -1,0 +1,23 @@
+replicaCount: 2
+
+image:
+  repository: exco-app
+  tag: sha-813df6a0e9e3b46c8076fb457b57bbb098c58451
+  pullPolicy: IfNotPresent
+
+containerPort: 8090
+
+service:
+  port: 80
+
+ingress:
+  enabled: true
+  className: traefik
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 64Mi
+  limits:
+    cpu: 500m
+    memory: 128Mi
