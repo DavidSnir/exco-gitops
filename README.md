@@ -4,10 +4,11 @@ A deliberately small web service, taken from source code to a running deployment
 local Kubernetes cluster, the GitOps way.
 
 **Repo:** [DavidSnir/exco-gitops](https://github.com/DavidSnir/exco-gitops) (public)
-**Status:** Parts 0–1 complete and verified. Parts 2–3 and bonuses are not implemented.
+**Status:** Parts 0–1 complete and verified. Part 2 implemented, deployment validation in progress. Part 3 and bonuses are not implemented.
 **Service:** `app/` — Node.js, standard library only, no dependencies
 **Cluster:** 3-node [kind](https://kind.sigs.k8s.io) cluster (1 control-plane + 2 workers)
-**Delivery:** GitHub Actions → GHCR → commit the image tag back to git → Argo CD rolls it out
+**Current delivery:** build a pinned source revision → load image into kind → git → Argo CD
+**Planned CI/CD:** GitHub Actions → GHCR → commit the image tag back to git → Argo CD rolls it out
 
 ---
 
@@ -21,7 +22,7 @@ local Kubernetes cluster, the GitOps way.
 | [kind](https://kind.sigs.k8s.io) | CLI 0.33.0 / Terraform provider 0.11.0 | Real kubeadm Kubernetes as Docker containers; the provider embeds kind 0.31.0 rather than calling the installed CLI. Kubernetes image pinned to 1.35.8 and its digest. |
 | [Terraform](https://terraform.io) | 1.16.6 | Cluster + Argo CD as code. Installed from HashiCorp releases, *not* Homebrew — see §3. |
 | [Helm](https://helm.sh) | CLI 4.3.0 / Terraform provider 3.3.0 | Terraform uses the provider's embedded Helm library; the CLI is for inspection. |
-| [Argo CD](https://argo-cd.readthedocs.io) | chart 10.10.3 / app 3.5.5 | GitOps sync engine; app integration comes in Part 2. |
+| [Argo CD](https://argo-cd.readthedocs.io) | chart 10.10.3 / app 3.5.5 | GitOps sync engine; watches `k8s/` on `main`, with auto-sync, prune and self-heal. |
 | [Traefik](https://traefik.io/) | chart 41.7.1 / app 3.7.14 | Maintained controller supporting standard Kubernetes Ingress; ingress-nginx retired in March 2026. |
 | GitHub Actions | — | CI on push to `main`. |
 | GHCR | — | Image registry that needs no separate credentials setup, and sits next to the repo. |
@@ -62,8 +63,10 @@ local Kubernetes cluster, the GitOps way.
 
 ### Key design decision
 
-**Who owns what.** Terraform owns the cluster, Argo CD and the ingress controller, matching Part 1.
-Argo CD owns the app manifests. Avoid having Terraform and Argo CD manage the same resources.
+**Who owns what.** Terraform owns the cluster, Argo CD, the ingress controller and the bootstrap
+Application CR. Argo CD exclusively owns the app Deployment, Service and Ingress. The local
+bootstrap Helm chart contains only the Application and depends on the Argo CD installation,
+avoiding plan-time CRD discovery on a fresh cluster. No manual `kubectl apply` of app resources.
 
 **Native Terraform resources rather than shell provisioners.** The community `tehcyx/kind`
 provider handles cluster creation/deletion; `hashicorp/helm` manages the two chart releases.
@@ -80,16 +83,20 @@ on either worker. No cloud load balancer, host networking, tunnel, or `/etc/host
 
 ## 2. Repository layout
 
-`app/` and `terraform/` are implemented. App manifests and CI are planned for later parts.
+`app/`, `terraform/` and `k8s/` are implemented. CI is planned for Part 3.
 
 ```
 app/                      the service
   server.js               GET /, GET /healthz, GET /readyz, graceful shutdown
-  Dockerfile              non-root (uid 1000, node)
+  Dockerfile              non-root (uid 1000, node), port 8090
 k8s/                      GitOps source of truth — Argo CD reads this
 terraform/                cluster + Argo CD + Traefik, as code
   values/                 version-controlled Helm values
   check.sh                read-only cluster acceptance checks
+  charts/bootstrap/       Application CR: Terraform hands app deployment to Argo CD
+scripts/
+  load-local-image.sh      build pinned source and load the image into kind (Part 2 only)
+  check-part2.sh           read-only GitOps and app acceptance checks
 .github/workflows/        CI/CD
 ```
 
@@ -134,6 +141,22 @@ Updated as work progresses.
 - Permission inspection caught a world-readable local Terraform state file. Set it to 0600;
   use `umask 077` before future Terraform commands because state includes cluster credentials.
 
+### Part 2
+
+- Preserved the user's Dockerfile port change to 8090 and aligned EXPOSE, container port,
+  Service and probes. Browser HTTP port stays 18080; standalone Docker testing uses 18082.
+- Deployment has 2 replicas, startup/readiness/liveness probes, CPU/memory requests and
+  limits, non-root UID 1000, no elevated privileges, and a read-only root filesystem.
+- RollingUpdate allows one surge pod and zero unavailable pods. Preferred anti-affinity
+  spreads replicas without blocking surge scheduling on two workers. A 5-second preStop
+  delay allows endpoint removal to propagate before SIGTERM; rollout proof is still Part 3.
+- Part 2 intentionally uses a preloaded, SHA-tagged local image. The load script archives
+  the exact source commit before building, so the image tag and reported version match it.
+  Fresh clusters need the load step until Part 3 supplies pullable GHCR images.
+- Argo CD Application source is this public repo's `k8s/` directory on `main`, rendered by
+  Kustomize into namespace `exco`. Automated sync, prune and self-heal are enabled.
+- App namespace enforces the restricted Pod Security Standard. Deployment validation pending.
+
 ---
 
 ## 4. How to use it
@@ -142,7 +165,7 @@ Updated as work progresses.
 
 ```sh
 docker build -t exco-app:dev --build-arg APP_VERSION=dev app/
-docker run -d --name exco-local -p 127.0.0.1:18082:8080 exco-app:dev
+docker run -d --name exco-local -p 127.0.0.1:18082:8090 exco-app:dev
 curl -fsS http://localhost:18082/
 curl -fsS http://localhost:18082/healthz
 docker exec exco-local id  # uid=1000(node), not root
@@ -165,20 +188,24 @@ terraform -chdir=terraform init
 terraform -chdir=terraform validate
 terraform -chdir=terraform plan
 terraform -chdir=terraform apply
-sh terraform/check.sh
+sh scripts/load-local-image.sh  # Part 2 only; no registry image yet
+sh scripts/check-part2.sh
+EXPECTED_HTTP_STATUS=200 sh terraform/check.sh
 
 export KUBECONFIG="$PWD/terraform/kubeconfig"
 kubectl get nodes -o wide
 kubectl get pods -n argocd
 kubectl get pods -n traefik
 helm list -A
-curl -i http://localhost:18080  # 404 is expected until Part 2 adds a route
+curl -i http://localhost:18080  # app response through Ingress
 
 # Destructive: removes this exercise cluster and everything inside it.
 terraform -chdir=terraform destroy
 ```
 
-One ordinary apply bootstraps everything; no `-target` or manual Helm installs.
+One ordinary apply bootstraps infrastructure and the Argo CD Application; no `-target`
+or manual Helm installs. In Part 2 only, load the image afterward; app pods can briefly
+show ImagePullBackOff until the local image is present and Kubernetes retries.
 To change the local HTTP port, use `-var='app_port=18090'` consistently for plan/apply;
 the kind cluster must be recreated to change Docker port mappings.
 
@@ -204,6 +231,24 @@ kubectl --kubeconfig terraform/kubeconfig -n argocd get secret argocd-initial-ad
 
 Do not commit the password or include it in screenshots. Stop port-forward with Ctrl+C.
 Authentication and TLS are left enabled; the UI is not exposed through ingress.
+
+### Open the GitOps-deployed app
+
+Open **http://localhost:18080**. The JSON response includes the message, source commit SHA
+and serving pod. No port-forward is needed for the app: traffic passes through Traefik.
+
+```sh
+export KUBECONFIG="$PWD/terraform/kubeconfig"
+kubectl -n argocd get application exco  # Synced / Healthy
+kubectl -n exco get deployment,pods,service,ingress
+curl -fsS http://localhost:18080/ | jq
+curl -fsS http://localhost:18080/healthz
+sh scripts/check-part2.sh
+```
+
+Make manifest changes in `k8s/`, commit and push to `main`; Argo CD reconciles them.
+Without a webhook, reconciliation can take a few minutes. A new local app image must
+be built/loaded before changing its tag in git. CI automates image delivery in Part 3.
 
 ### AI correction
 

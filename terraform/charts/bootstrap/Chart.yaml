@@ -1,0 +1,6 @@
+apiVersion: v2
+name: exco-bootstrap
+description: Terraform-to-Argo-CD handoff; installs only the Application, never app workloads.
+type: application
+version: 0.1.0
+appVersion: "1.0"

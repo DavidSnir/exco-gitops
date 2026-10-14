@@ -1,0 +1,5 @@
+applicationName: exco
+repoURL: https://github.com/DavidSnir/exco-gitops.git
+targetRevision: main
+path: k8s
+destinationNamespace: exco
