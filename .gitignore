@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Terraform state, plan files and local kubeconfig must never be committed.
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfplan
+terraform/kubeconfig
+terraform/kind.yaml.bak
+
+# Local scratch
+node_modules/
+*.log
