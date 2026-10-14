@@ -4,7 +4,7 @@ A deliberately small web service, taken from source code to a running deployment
 local Kubernetes cluster, the GitOps way.
 
 **Repo:** [DavidSnir/exco-gitops](https://github.com/DavidSnir/exco-gitops) (public)
-**Status:** Part 0 complete. Part 1 implemented, validation in progress. Parts 2–3 and bonuses are not implemented.
+**Status:** Parts 0–1 complete and verified. Parts 2–3 and bonuses are not implemented.
 **Service:** `app/` — Node.js, standard library only, no dependencies
 **Cluster:** 3-node [kind](https://kind.sigs.k8s.io) cluster (1 control-plane + 2 workers)
 **Delivery:** GitHub Actions → GHCR → commit the image tag back to git → Argo CD rolls it out
@@ -124,7 +124,13 @@ Updated as work progresses.
   deployed. All three nodes and all five running add-on pods are Ready with zero restarts.
 - Acceptance checks pass; `localhost:18080` returns the expected pre-app 404. Argo CD's
   health endpoint and authenticated admin session verified without printing credentials.
-- Second Terraform plan returns exit code 0 with **No changes**. Destroy/recreate pending.
+- Second Terraform plan returns exit code 0 with **No changes**.
+- `terraform destroy` removed both releases before the cluster, all three exercise node
+  containers disappeared, and Terraform's managed-resource state became empty.
+- A fresh ordinary apply recreated everything: cluster in 27 seconds, both releases healthy
+  within about a minute. Acceptance checks pass again, and the final plan reports **No changes**.
+- Left the recreated cluster running. The ingress endpoint still returns 404 because the
+  app's GitOps manifests and Argo CD Application are intentionally deferred to Part 2.
 - Permission inspection caught a world-readable local Terraform state file. Set it to 0600;
   use `umask 077` before future Terraform commands because state includes cluster credentials.
 
@@ -207,6 +213,8 @@ will use its own `GITHUB_TOKEN` with `packages: write`; no extra CLI scope is ne
 Code review also caught that `draining` was never set to true in the shutdown handler;
 fixed it. Graceful shutdown alone does not prove zero-downtime Kubernetes rollouts:
 endpoint propagation and traffic draining still need configuration and testing in Part 3.
+The initial ingress-nginx suggestion was also out of date: checking the official Kubernetes
+retirement announcement showed support ended in March 2026, so we selected Traefik instead.
 
 ---
 
